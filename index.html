@@ -1,0 +1,1731 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Ray-Guard — Attack Surface Monitoring</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+
+<style>
+/* ======================================================
+   VARIABLES & RESET
+====================================================== */
+:root {
+  --bg:        #04070f;
+  --bg2:       #070c18;
+  --panel:     rgba(10,16,32,0.85);
+  --panel2:    rgba(14,22,44,0.7);
+  --border:    rgba(0,210,255,0.1);
+  --border2:   rgba(0,210,255,0.18);
+  --glow-b:    #00c2ff;
+  --glow-g:    #00ffaa;
+  --glow-r:    #ff4f6d;
+  --glow-y:    #ffd24d;
+  --text:      #ddeeff;
+  --text2:     #7899b8;
+  --text3:     #3a5a7a;
+  --mono:      'JetBrains Mono', monospace;
+  --head:      'Syne', sans-serif;
+  --body:      'DM Sans', sans-serif;
+  --r:         16px;
+  --r2:        12px;
+  --r3:        999px;
+  --sh:        0 4px 40px rgba(0,0,0,.6);
+  --transition: 0.22s cubic-bezier(.4,0,.2,1);
+}
+
+*, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
+
+html { scroll-behavior:smooth; }
+
+body {
+  font-family: var(--body);
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  overflow-x: hidden;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+/* Animated grid background */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(0,194,255,0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,194,255,0.025) 1px, transparent 1px);
+  background-size: 44px 44px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 60% 50% at 80% 10%, rgba(0,80,160,0.18) 0%, transparent 70%),
+    radial-gradient(ellipse 50% 40% at 10% 85%, rgba(0,120,80,0.12) 0%, transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.container {
+  position: relative;
+  z-index: 1;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 24px 28px 56px;
+}
+
+/* ======================================================
+   SCROLLBAR
+====================================================== */
+::-webkit-scrollbar { width:6px; height:6px; }
+::-webkit-scrollbar-track { background:var(--bg2); }
+::-webkit-scrollbar-thumb { background:rgba(0,194,255,.3); border-radius:99px; }
+
+/* ======================================================
+   TYPOGRAPHY HELPERS
+====================================================== */
+.mono { font-family: var(--mono); }
+.muted { color: var(--text2); }
+.dim   { color: var(--text3); }
+
+/* ======================================================
+   HEADER
+====================================================== */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 36px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--border);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.brand-logo {
+  width: 46px; height: 46px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(0,194,255,.15), rgba(0,255,170,.1));
+  border: 1px solid var(--border2);
+  display: grid;
+  place-items: center;
+  font-size: 22px;
+  box-shadow: 0 0 20px rgba(0,194,255,.12);
+  flex-shrink: 0;
+}
+
+.brand-text h1 {
+  font-family: var(--head);
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: .5px;
+  background: linear-gradient(90deg, #fff 0%, #90d4f7 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.brand-text p {
+  font-size: 13px;
+  color: var(--text2);
+  letter-spacing: .5px;
+  text-transform: uppercase;
+  font-weight: 500;
+  margin-top: 2px;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.hbadge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: var(--r3);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  font-size: 13px;
+  font-family: var(--mono);
+  backdrop-filter: blur(12px);
+}
+
+.dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--text3);
+  flex-shrink: 0;
+  transition: background var(--transition), box-shadow var(--transition);
+}
+
+.dot.green { background: var(--glow-g); box-shadow: 0 0 8px var(--glow-g); animation: pulse-g 2s infinite; }
+.dot.red   { background: var(--glow-r); box-shadow: 0 0 8px var(--glow-r); }
+.dot.yellow{ background: var(--glow-y); box-shadow: 0 0 8px var(--glow-y); }
+
+@keyframes pulse-g {
+  0%,100% { box-shadow: 0 0 8px var(--glow-g); }
+  50% { box-shadow: 0 0 18px var(--glow-g); }
+}
+
+#liveClock {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--text2);
+  letter-spacing: .5px;
+}
+
+/* ======================================================
+   KPI GRID
+====================================================== */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 14px;
+  margin-bottom: 28px;
+}
+
+.kpi {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 18px 16px;
+  backdrop-filter: blur(16px);
+  box-shadow: var(--sh);
+  position: relative;
+  overflow: hidden;
+  transition: border-color var(--transition), transform var(--transition);
+  cursor: default;
+}
+
+.kpi::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--accent, var(--glow-b)), transparent);
+  opacity: .6;
+}
+
+.kpi:hover { border-color: var(--border2); transform: translateY(-2px); }
+
+.kpi-label {
+  font-size: 11px;
+  letter-spacing: .8px;
+  text-transform: uppercase;
+  color: var(--text2);
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+
+.kpi-value {
+  font-family: var(--head);
+  font-size: 28px;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--text);
+}
+
+.kpi-sub {
+  font-size: 12px;
+  color: var(--text3);
+  margin-top: 6px;
+}
+
+.kpi-icon {
+  position: absolute;
+  right: 14px; top: 14px;
+  font-size: 20px;
+  opacity: .35;
+}
+
+/* ======================================================
+   MAIN LAYOUT
+====================================================== */
+.main-layout {
+  display: grid;
+  grid-template-columns: 1fr 400px;
+  gap: 20px;
+  align-items: start;
+}
+
+.left-col {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.right-col {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  position: sticky;
+  top: 24px;
+}
+
+/* ======================================================
+   PANELS
+====================================================== */
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  backdrop-filter: blur(16px);
+  box-shadow: var(--sh);
+  overflow: hidden;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.panel-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--head);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: .2px;
+}
+
+.panel-title span { font-size: 18px; }
+
+.panel-body { padding: 16px 20px; }
+
+/* ======================================================
+   BUTTONS
+====================================================== */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  border-radius: var(--r2);
+  cursor: pointer;
+  font-family: var(--body);
+  font-weight: 600;
+  font-size: 13px;
+  transition: all var(--transition);
+  white-space: nowrap;
+}
+
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+
+.btn-ghost {
+  background: rgba(255,255,255,.04);
+  border: 1px solid var(--border);
+  color: var(--text2);
+  padding: 8px 12px;
+}
+.btn-ghost:hover:not(:disabled) { background: rgba(255,255,255,.07); color: var(--text); border-color: var(--border2); }
+
+.btn-primary {
+  background: linear-gradient(135deg, rgba(0,194,255,.2), rgba(0,255,170,.12));
+  border: 1px solid rgba(0,194,255,.35);
+  color: #7ee8ff;
+  padding: 10px 16px;
+}
+.btn-primary:hover:not(:disabled) { background: linear-gradient(135deg, rgba(0,194,255,.3), rgba(0,255,170,.2)); box-shadow: 0 0 20px rgba(0,194,255,.2); }
+
+.btn-danger {
+  background: rgba(255,79,109,.08);
+  border: 1px solid rgba(255,79,109,.2);
+  color: #ff8fa0;
+  padding: 8px 12px;
+}
+.btn-danger:hover:not(:disabled) { background: rgba(255,79,109,.16); }
+
+.btn-scan {
+  background: linear-gradient(135deg, rgba(0,255,170,.15), rgba(0,194,255,.1));
+  border: 1px solid rgba(0,255,170,.3);
+  color: #6fffd4;
+  padding: 8px 14px;
+}
+.btn-scan:hover:not(:disabled) { background: linear-gradient(135deg, rgba(0,255,170,.25), rgba(0,194,255,.18)); box-shadow: 0 0 16px rgba(0,255,170,.15); }
+
+.btn-icon {
+  width: 34px; height: 34px;
+  background: rgba(255,255,255,.04);
+  border: 1px solid var(--border);
+  color: var(--text2);
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  font-size: 16px;
+}
+.btn-icon:hover { background: rgba(255,255,255,.07); color: var(--text); }
+
+/* ======================================================
+   SEARCH BAR
+====================================================== */
+.search-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.input-wrap {
+  flex: 1;
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.input-wrap .icon-left {
+  position: absolute;
+  left: 12px;
+  color: var(--text3);
+  font-size: 15px;
+  pointer-events: none;
+}
+
+input[type=text], input[type=search] {
+  width: 100%;
+  background: rgba(0,0,0,.35);
+  border: 1px solid var(--border);
+  border-radius: var(--r2);
+  color: var(--text);
+  font-family: var(--body);
+  font-size: 14px;
+  padding: 10px 14px 10px 36px;
+  outline: none;
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+
+input[type=text]:focus, input[type=search]:focus {
+  border-color: rgba(0,194,255,.4);
+  box-shadow: 0 0 0 3px rgba(0,194,255,.07);
+}
+
+input::placeholder { color: var(--text3); }
+
+/* ======================================================
+   TARGET LIST
+====================================================== */
+.target-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.target-item {
+  background: rgba(0,0,0,.25);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  overflow: hidden;
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+
+.target-item:hover { border-color: var(--border2); }
+
+.target-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  cursor: pointer;
+}
+
+.target-icon {
+  width: 38px; height: 38px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, rgba(0,194,255,.1), rgba(0,255,170,.06));
+  border: 1px solid rgba(0,194,255,.15);
+  display: grid;
+  place-items: center;
+  font-size: 17px;
+  flex-shrink: 0;
+}
+
+.target-info { flex: 1; min-width: 0; }
+
+.target-domain {
+  font-family: var(--mono);
+  font-size: 14px;
+  font-weight: 500;
+  color: #c8e8ff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.target-meta {
+  font-size: 12px;
+  color: var(--text2);
+  margin-top: 3px;
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.target-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.badge {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: var(--mono);
+  letter-spacing: .4px;
+  text-transform: uppercase;
+}
+
+.badge-ok  { background: rgba(0,255,170,.12); color: var(--glow-g); border: 1px solid rgba(0,255,170,.2); }
+.badge-med { background: rgba(255,210,77,.12); color: var(--glow-y); border: 1px solid rgba(255,210,77,.2); }
+.badge-high{ background: rgba(255,79,109,.12); color: var(--glow-r); border: 1px solid rgba(255,79,109,.2); }
+.badge-grey{ background: rgba(120,153,184,.1); color: var(--text2); border: 1px solid rgba(120,153,184,.15); }
+
+/* ======================================================
+   SCAN PANEL (within target)
+====================================================== */
+.scan-panel {
+  border-top: 1px solid var(--border);
+  padding: 16px;
+}
+
+.scan-stage-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+}
+
+.scan-stage-num {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--glow-b);
+  min-width: 40px;
+}
+
+.scan-stage-label {
+  font-size: 13px;
+  color: var(--text2);
+}
+
+.scan-stage-label.active { color: var(--text); }
+.scan-stage-label.done   { color: var(--glow-g); }
+
+.stage-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--text3);
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.stage-dot.active { background: var(--glow-b); box-shadow: 0 0 8px var(--glow-b); animation: pulse-b 1s infinite; }
+.stage-dot.done   { background: var(--glow-g); }
+
+@keyframes pulse-b { 0%,100%{ opacity:1; } 50%{ opacity:.3; } }
+
+.progress-wrap {
+  margin: 14px 0 8px;
+}
+
+.progress-track {
+  background: rgba(255,255,255,.05);
+  border-radius: 999px;
+  height: 6px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  width: 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--glow-b), var(--glow-g));
+  transition: width .4s ease;
+  box-shadow: 0 0 10px var(--glow-b);
+}
+
+.progress-pct {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text2);
+  text-align: right;
+  margin-top: 5px;
+}
+
+/* ======================================================
+   SCAN RESULT
+====================================================== */
+.result-section { margin-top: 16px; }
+
+.result-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.result-title {
+  font-family: var(--head);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text2);
+  text-transform: uppercase;
+  letter-spacing: .5px;
+}
+
+.result-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.rmeta {
+  background: rgba(0,0,0,.3);
+  border: 1px solid var(--border);
+  border-radius: var(--r2);
+  padding: 12px;
+}
+
+.rmeta-label {
+  font-size: 11px;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: .6px;
+  margin-bottom: 6px;
+}
+
+.rmeta-value {
+  font-family: var(--mono);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.1;
+}
+
+.rmeta-value.small { font-size: 13px; word-break: break-all; }
+
+/* Risk gauge bar */
+.risk-gauge {
+  margin: 4px 0 2px;
+  height: 5px;
+  background: rgba(255,255,255,.06);
+  border-radius: 99px;
+  overflow: hidden;
+}
+
+.risk-fill {
+  height: 100%;
+  border-radius: 99px;
+  transition: width 1s cubic-bezier(.4,0,.2,1);
+}
+
+.risk-fill.low  { background: var(--glow-g); }
+.risk-fill.med  { background: var(--glow-y); }
+.risk-fill.high { background: var(--glow-r); }
+
+.ports-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-bottom: 14px;
+}
+
+.port-chip {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(0,194,255,.08);
+  border: 1px solid rgba(0,194,255,.18);
+  color: #7ee8ff;
+}
+
+.ai-block {
+  background: linear-gradient(135deg, rgba(0,194,255,.05), rgba(0,255,170,.04));
+  border: 1px solid rgba(0,194,255,.15);
+  border-radius: var(--r);
+  padding: 16px;
+  margin-bottom: 12px;
+}
+
+.ai-block-title {
+  font-family: var(--head);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .8px;
+  color: #7ee8ff;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.ai-block-title::before {
+  content: '';
+  display: inline-block;
+  width: 3px; height: 12px;
+  border-radius: 2px;
+  background: var(--glow-b);
+  box-shadow: 0 0 8px var(--glow-b);
+}
+
+.ai-block p {
+  font-size: 14px;
+  color: var(--text2);
+  line-height: 1.7;
+}
+
+.ai-recs {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ai-rec {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  font-size: 14px;
+  color: var(--text2);
+  line-height: 1.6;
+}
+
+.ai-rec::before {
+  content: '›';
+  color: var(--glow-g);
+  font-size: 18px;
+  line-height: 1.3;
+  flex-shrink: 0;
+}
+
+.result-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+
+/* ======================================================
+   ADD TARGET ROW
+====================================================== */
+.add-row {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+/* ======================================================
+   ALERTS
+====================================================== */
+.alert-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.alert-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px;
+  border-radius: var(--r2);
+  background: rgba(0,0,0,.25);
+  border: 1px solid var(--border);
+  transition: border-color var(--transition);
+}
+
+.alert-item:hover { border-color: var(--border2); }
+
+.alert-icon {
+  width: 34px; height: 34px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  font-size: 16px;
+  flex-shrink: 0;
+  background: rgba(255,79,109,.08);
+  border: 1px solid rgba(255,79,109,.15);
+}
+
+.alert-content { flex: 1; min-width: 0; }
+
+.alert-msg {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+  line-height: 1.5;
+}
+
+.alert-sub {
+  font-size: 12px;
+  color: var(--text2);
+  margin-top: 4px;
+  font-family: var(--mono);
+}
+
+/* ======================================================
+   ACTIVITY FEED
+====================================================== */
+.feed-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  max-height: 380px;
+  overflow-y: auto;
+}
+
+.feed-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 11px 0;
+  border-bottom: 1px solid rgba(255,255,255,.04);
+  animation: fadein .4s ease;
+}
+
+.feed-item:last-child { border-bottom: none; }
+
+@keyframes fadein { from { opacity:0; transform:translateY(-6px); } to { opacity:1; transform:none; } }
+
+.feed-dot-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  flex-shrink: 0;
+  padding-top: 4px;
+}
+
+.feed-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--text3);
+}
+
+.feed-dot.b { background: var(--glow-b); }
+.feed-dot.g { background: var(--glow-g); }
+.feed-dot.r { background: var(--glow-r); }
+.feed-dot.y { background: var(--glow-y); }
+
+.feed-text {
+  font-size: 13px;
+  color: var(--text2);
+  line-height: 1.5;
+}
+
+.feed-text strong { color: var(--text); font-weight: 600; }
+
+.feed-time {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text3);
+  margin-top: 2px;
+}
+
+/* ======================================================
+   TOAST
+====================================================== */
+.toast-container {
+  position: fixed;
+  bottom: 28px;
+  right: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  z-index: 9999;
+}
+
+.toast {
+  min-width: 260px;
+  max-width: 360px;
+  padding: 14px 18px;
+  border-radius: var(--r);
+  border: 1px solid var(--border);
+  background: rgba(7,12,24,.95);
+  backdrop-filter: blur(20px);
+  box-shadow: 0 8px 32px rgba(0,0,0,.5);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  animation: toast-in .3s ease;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.toast.success { border-color: rgba(0,255,170,.25); }
+.toast.error   { border-color: rgba(255,79,109,.25); }
+.toast.info    { border-color: rgba(0,194,255,.25); }
+
+@keyframes toast-in { from{ opacity:0; transform:translateY(16px); } to{ opacity:1; transform:none; } }
+@keyframes toast-out { to{ opacity:0; transform:translateY(8px); } }
+
+/* ======================================================
+   SKELETON LOADER
+====================================================== */
+.skeleton {
+  background: linear-gradient(90deg, rgba(255,255,255,.04) 25%, rgba(255,255,255,.07) 50%, rgba(255,255,255,.04) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: 8px;
+}
+
+@keyframes shimmer { to{ background-position:-200% 0; } }
+
+.sk-row { height: 60px; margin-bottom: 10px; }
+
+/* ======================================================
+   EMPTY STATE
+====================================================== */
+.empty-state {
+  text-align: center;
+  padding: 36px 20px;
+  color: var(--text2);
+}
+
+.empty-state .empty-icon { font-size: 36px; margin-bottom: 12px; }
+.empty-state p { font-size: 14px; }
+
+/* ======================================================
+   SORT BAR
+====================================================== */
+.sort-bar {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.sort-btn {
+  font-size: 11px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text2);
+  cursor: pointer;
+  font-family: var(--body);
+  font-weight: 600;
+  transition: all var(--transition);
+}
+
+.sort-btn.active, .sort-btn:hover {
+  background: rgba(0,194,255,.1);
+  border-color: rgba(0,194,255,.3);
+  color: #7ee8ff;
+}
+
+/* ======================================================
+   RESPONSIVE
+====================================================== */
+@media (max-width: 1200px) {
+  .kpi-grid { grid-template-columns: repeat(3, 1fr); }
+  .main-layout { grid-template-columns: 1fr; }
+  .right-col { position: static; display: grid; grid-template-columns: 1fr 1fr; }
+}
+
+@media (max-width: 800px) {
+  .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+  .right-col { grid-template-columns: 1fr; }
+  .result-meta-grid { grid-template-columns: repeat(2,1fr); }
+  .container { padding: 16px 16px 40px; }
+}
+
+@media (max-width: 480px) {
+  .kpi-grid { grid-template-columns: 1fr 1fr; }
+  .header-right { display:none; }
+  .result-meta-grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+
+<!-- ===== HEADER ===== -->
+<header class="header">
+  <div class="brand">
+    <div class="brand-logo">🛡️</div>
+    <div class="brand-text">
+      <h1>Ray-Guard</h1>
+      <p>Attack Surface Monitoring System</p>
+    </div>
+  </div>
+
+  <div class="header-right">
+    <div class="hbadge" id="apiStatus">
+      <span class="dot" id="apiDot"></span>
+      <span id="apiText">Connecting…</span>
+    </div>
+    <div class="hbadge">
+      <span style="font-size:13px">🕐</span>
+      <span id="liveClock">--:--:--</span>
+    </div>
+    <div class="hbadge" style="background:linear-gradient(135deg,rgba(0,194,255,.07),rgba(0,255,170,.05));border-color:rgba(0,194,255,.2);">
+      <span style="color:var(--glow-g);font-size:11px;font-weight:700;letter-spacing:.6px;">AI ACTIVE</span>
+    </div>
+  </div>
+</header>
+
+<!-- ===== KPI CARDS ===== -->
+<section class="kpi-grid">
+  <div class="kpi" style="--accent:var(--glow-b)">
+    <div class="kpi-icon">🎯</div>
+    <div class="kpi-label">Total Targets</div>
+    <div class="kpi-value mono" id="kpiTargets">—</div>
+    <div class="kpi-sub">Monitored domains</div>
+  </div>
+  <div class="kpi" style="--accent:var(--glow-r)">
+    <div class="kpi-icon">🔔</div>
+    <div class="kpi-label">Active Alerts</div>
+    <div class="kpi-value mono" id="kpiAlerts">—</div>
+    <div class="kpi-sub">Requires attention</div>
+  </div>
+  <div class="kpi" style="--accent:var(--glow-g)">
+    <div class="kpi-icon">🔍</div>
+    <div class="kpi-label">Scans Today</div>
+    <div class="kpi-value mono" id="kpiScans">0</div>
+    <div class="kpi-sub">Session count</div>
+  </div>
+  <div class="kpi" style="--accent:var(--glow-r)">
+    <div class="kpi-icon">⚠️</div>
+    <div class="kpi-label">High Risk</div>
+    <div class="kpi-value mono" id="kpiHighRisk">—</div>
+    <div class="kpi-sub">Critical assets</div>
+  </div>
+  <div class="kpi" style="--accent:var(--glow-y)">
+    <div class="kpi-icon">⚡</div>
+    <div class="kpi-label">API Latency</div>
+    <div class="kpi-value mono" id="kpiLatency">—</div>
+    <div class="kpi-sub">Last check</div>
+  </div>
+  <div class="kpi" style="--accent:var(--glow-g)">
+    <div class="kpi-icon">💠</div>
+    <div class="kpi-label">System Status</div>
+    <div class="kpi-value" id="kpiStatus" style="font-size:20px">—</div>
+    <div class="kpi-sub">All services</div>
+  </div>
+</section>
+
+<!-- ===== MAIN LAYOUT ===== -->
+<div class="main-layout">
+
+  <!-- LEFT: TARGET MANAGEMENT -->
+  <div class="left-col">
+
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">
+          <span>🎯</span> Target Management
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-ghost" onclick="loadTargets()">↻ Refresh</button>
+        </div>
+      </div>
+      <div class="panel-body">
+
+        <!-- Search & Sort -->
+        <div class="search-row">
+          <div class="input-wrap">
+            <span class="icon-left">🔎</span>
+            <input type="search" id="searchInput" placeholder="Search targets…" oninput="filterTargets()"/>
+          </div>
+        </div>
+
+        <div class="sort-bar">
+          <button class="sort-btn active" id="sortNewest" onclick="setSort('newest',this)">Newest</button>
+          <button class="sort-btn" id="sortRisk" onclick="setSort('risk',this)">Highest Risk</button>
+          <button class="sort-btn" id="sortAz" onclick="setSort('az',this)">A–Z</button>
+        </div>
+
+        <!-- Targets list -->
+        <div class="target-list" id="targetsList">
+          <div class="skeleton sk-row"></div>
+          <div class="skeleton sk-row"></div>
+          <div class="skeleton sk-row"></div>
+        </div>
+
+        <!-- Add Target -->
+        <div class="add-row">
+          <div class="input-wrap" style="flex:1">
+            <span class="icon-left">🌐</span>
+            <input type="text" id="domainInput" placeholder="example.com"/>
+          </div>
+          <button class="btn btn-primary" onclick="addTarget()">＋ Add Target</button>
+        </div>
+
+        <p class="muted" style="font-size:12px;margin-top:12px;">
+          Add domains to monitor. Click <strong style="color:var(--text)">Scan</strong> to run an AI-powered attack surface analysis.
+        </p>
+      </div>
+    </div>
+
+  </div><!-- /left-col -->
+
+  <!-- RIGHT: ALERTS + ACTIVITY -->
+  <div class="right-col">
+
+    <!-- ALERTS -->
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title"><span>🔔</span> Alert Center</div>
+        <button class="btn btn-ghost" onclick="loadAlerts()" style="font-size:12px;padding:6px 10px;">↻</button>
+      </div>
+      <div class="panel-body">
+        <div class="alert-list" id="alertsList">
+          <div class="skeleton sk-row"></div>
+          <div class="skeleton sk-row"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ACTIVITY FEED -->
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title"><span>📡</span> Live Activity</div>
+        <button class="btn btn-ghost" onclick="clearFeed()" style="font-size:12px;padding:6px 10px;">Clear</button>
+      </div>
+      <div class="panel-body" style="padding-top:4px;">
+        <div class="feed-list" id="activityFeed">
+          <div class="empty-state" style="padding:24px;">
+            <div class="empty-icon">📡</div>
+            <p>Activity will appear here</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /right-col -->
+</div><!-- /main-layout -->
+
+</div><!-- /container -->
+
+<!-- Toast container -->
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- ======================================================
+   JAVASCRIPT
+====================================================== -->
+<script>
+/* ---- CONFIG ---- */
+const API = "http://127.0.0.1:8000";
+
+/* ---- STATE ---- */
+let allTargets   = [];
+let scanCount    = 0;
+let currentSort  = 'newest';
+let scanResults  = {}; // target_id -> result data
+
+/* ---- SCAN STAGES ---- */
+const STAGES = [
+  [10,  "Resolving DNS…"],
+  [25,  "Checking HTTP…"],
+  [45,  "Enumerating Ports…"],
+  [65,  "Building Risk Model…"],
+  [85,  "Requesting AI Analysis…"],
+  [100, "Completed"],
+];
+
+/* ====================================================
+   CLOCK
+==================================================== */
+function startClock(){
+  function tick(){
+    const now = new Date();
+    document.getElementById('liveClock').textContent =
+      now.toLocaleTimeString('en-GB',{hour12:false});
+  }
+  tick();
+  setInterval(tick, 1000);
+}
+
+/* ====================================================
+   TOAST
+==================================================== */
+function toast(msg, type='info', duration=3200){
+  const icons = { success:'✅', error:'❌', info:'ℹ️' };
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.innerHTML = `<span style="font-size:18px">${icons[type]||'ℹ️'}</span><span>${msg}</span>`;
+  document.getElementById('toastContainer').appendChild(el);
+  setTimeout(()=>{
+    el.style.animation='toast-out .3s ease forwards';
+    setTimeout(()=>el.remove(), 300);
+  }, duration);
+}
+
+/* ====================================================
+   ACTIVITY FEED
+==================================================== */
+function addFeed(text, color='b'){
+  const feed = document.getElementById('activityFeed');
+  const emptyState = feed.querySelector('.empty-state');
+  if(emptyState) emptyState.remove();
+
+  const now = new Date().toLocaleTimeString('en-GB',{hour12:false});
+  const item = document.createElement('div');
+  item.className = 'feed-item';
+  item.innerHTML = `
+    <div class="feed-dot-wrap"><div class="feed-dot ${color}"></div></div>
+    <div>
+      <div class="feed-text">${text}</div>
+      <div class="feed-time">${now}</div>
+    </div>
+  `;
+  feed.insertBefore(item, feed.firstChild);
+
+  // Keep max 30
+  const items = feed.querySelectorAll('.feed-item');
+  if(items.length > 30) items[items.length-1].remove();
+}
+
+function clearFeed(){
+  document.getElementById('activityFeed').innerHTML =
+    `<div class="empty-state" style="padding:24px;"><div class="empty-icon">📡</div><p>Activity will appear here</p></div>`;
+}
+
+/* ====================================================
+   API CHECK
+==================================================== */
+async function checkAPI(){
+  const dot  = document.getElementById('apiDot');
+  const text = document.getElementById('apiText');
+
+  const t0 = Date.now();
+  try{
+    const res = await fetch(API + "/docs", {signal: AbortSignal.timeout(4000)});
+    const lat  = Date.now() - t0;
+    if(res.ok){
+      dot.className = 'dot green';
+      text.textContent = 'API Connected';
+      document.getElementById('kpiLatency').textContent = lat + 'ms';
+      document.getElementById('kpiStatus').textContent  = 'ONLINE';
+      document.getElementById('kpiStatus').style.color  = 'var(--glow-g)';
+      addFeed('<strong>API</strong> connected successfully', 'g');
+    } else {
+      dot.className = 'dot yellow';
+      text.textContent = 'API Error';
+      document.getElementById('kpiStatus').textContent = 'DEGRADED';
+      document.getElementById('kpiStatus').style.color = 'var(--glow-y)';
+    }
+  } catch(e){
+    dot.className = 'dot red';
+    text.textContent = 'Offline';
+    document.getElementById('kpiLatency').textContent = '—';
+    document.getElementById('kpiStatus').textContent  = 'OFFLINE';
+    document.getElementById('kpiStatus').style.color  = 'var(--glow-r)';
+    addFeed('<strong>API</strong> unreachable', 'r');
+  }
+}
+
+/* ====================================================
+   LOAD TARGETS
+==================================================== */
+async function loadTargets(){
+  const box = document.getElementById('targetsList');
+  box.innerHTML = `<div class="skeleton sk-row"></div><div class="skeleton sk-row"></div>`;
+
+  try{
+    const res  = await fetch(API + "/targets/");
+    const json = await res.json();
+    allTargets = json.data || json;
+    document.getElementById('kpiTargets').textContent = allTargets.length;
+
+    // High risk count from cached scan results
+    updateHighRisk();
+    renderTargets();
+  } catch(e){
+    box.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon">⚠️</div>
+        <p>Could not load targets. Ensure the backend is running.</p>
+      </div>`;
+  }
+}
+
+function updateHighRisk(){
+  const count = Object.values(scanResults).filter(r => r.severity === 'high' || (r.risk_score||0) >= 70).length;
+  document.getElementById('kpiHighRisk').textContent = count;
+}
+
+/* ====================================================
+   RENDER TARGETS
+==================================================== */
+function renderTargets(){
+  const box    = document.getElementById('targetsList');
+  const q      = document.getElementById('searchInput').value.toLowerCase();
+
+  let list = [...allTargets];
+
+  if(q) list = list.filter(t => t.domain.toLowerCase().includes(q));
+
+  if(currentSort === 'newest') list = list.reverse();
+  else if(currentSort === 'az') list.sort((a,b) => a.domain.localeCompare(b.domain));
+  else if(currentSort === 'risk') list.sort((a,b) => {
+    const ra = (scanResults[a.id]||{}).risk_score || 0;
+    const rb = (scanResults[b.id]||{}).risk_score || 0;
+    return rb - ra;
+  });
+
+  if(!list.length){
+    box.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon">🎯</div>
+        <p>${q ? 'No targets match your search.' : 'No targets yet. Add your first domain below.'}</p>
+      </div>`;
+    return;
+  }
+
+  box.innerHTML = list.map(t => {
+    const result   = scanResults[t.id];
+    const severity = result ? result.severity || 'low' : null;
+    const badgeCls = severity === 'high' ? 'badge-high' : severity === 'medium' ? 'badge-med' : severity ? 'badge-ok' : 'badge-grey';
+    const badgeTxt = severity ? severity.toUpperCase() : 'NOT SCANNED';
+
+    return `
+      <div class="target-item" id="ti-${t.id}">
+        <div class="target-header" onclick="toggleDetails(${t.id})">
+          <div class="target-icon">🌐</div>
+          <div class="target-info">
+            <div class="target-domain">${escHtml(t.domain)}</div>
+            <div class="target-meta">
+              <span>ID: ${t.id}</span>
+              ${result ? `<span style="color:var(--text3)">Score: ${result.risk_score||0}/100</span>` : ''}
+            </div>
+          </div>
+          <div class="target-actions" onclick="event.stopPropagation()">
+            <span class="badge ${badgeCls}">${badgeTxt}</span>
+            <button class="btn btn-scan" id="scan-btn-${t.id}" onclick="runScan(${t.id})">▶ Scan</button>
+            <button class="btn btn-danger" onclick="deleteTarget(${t.id})">✕</button>
+          </div>
+        </div>
+        <div class="scan-panel" id="sp-${t.id}" style="display:none"></div>
+      </div>
+    `;
+  }).join('');
+}
+
+function toggleDetails(id){
+  const panel = document.getElementById(`sp-${id}`);
+  if(!panel) return;
+  panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+}
+
+function filterTargets(){ renderTargets(); }
+
+function setSort(type, el){
+  currentSort = type;
+  document.querySelectorAll('.sort-btn').forEach(b=>b.classList.remove('active'));
+  el.classList.add('active');
+  renderTargets();
+}
+
+/* ====================================================
+   ADD / DELETE TARGET
+==================================================== */
+async function addTarget(){
+  const input  = document.getElementById('domainInput');
+  const domain = input.value.trim();
+  if(!domain){ toast('Please enter a domain name.','error'); return; }
+
+  try{
+    const res = await fetch(API + "/targets/", {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({domain})
+    });
+
+    if(!res.ok) throw new Error('Add failed');
+    input.value = '';
+    toast(`Target <strong>${escHtml(domain)}</strong> added.`, 'success');
+    addFeed(`Target <strong>${escHtml(domain)}</strong> added`, 'b');
+    loadTargets();
+  } catch(e){
+    toast('Failed to add target.','error');
+  }
+}
+
+async function deleteTarget(id){
+  const target = allTargets.find(t=>t.id===id);
+  try{
+    await fetch(`${API}/targets/${id}`, {method:'DELETE'});
+    delete scanResults[id];
+    toast(`Target removed.`, 'info');
+    addFeed(`Target <strong>${target?.domain||id}</strong> removed`, 'r');
+    loadTargets();
+  } catch(e){
+    toast('Failed to delete target.','error');
+  }
+}
+
+/* ====================================================
+   RUN SCAN
+==================================================== */
+async function runScan(id){
+  const btn    = document.getElementById(`scan-btn-${id}`);
+  const panel  = document.getElementById(`sp-${id}`);
+  const target = allTargets.find(t=>t.id===id);
+
+  if(!btn || !panel) return;
+
+  btn.disabled = true;
+  btn.textContent = '⏳ Scanning';
+  panel.style.display = 'block';
+  scanCount++;
+  document.getElementById('kpiScans').textContent = scanCount;
+  addFeed(`Scan started → <strong>${target?.domain||id}</strong>`, 'b');
+
+  // Stage display
+  let stageIdx = 0;
+
+  panel.innerHTML = `
+    <div id="stages-${id}">
+      ${STAGES.map((s,i)=>`
+        <div class="scan-stage-row" id="stage-${id}-${i}">
+          <span class="scan-stage-num">[${s[0]}%]</span>
+          <span class="scan-stage-label">${escHtml(s[1])}</span>
+          <span class="stage-dot" id="stagedt-${id}-${i}"></span>
+        </div>
+      `).join('')}
+    </div>
+    <div class="progress-wrap">
+      <div class="progress-track">
+        <div class="progress-fill" id="pbar-${id}"></div>
+      </div>
+      <div class="progress-pct" id="ppct-${id}">0%</div>
+    </div>
+  `;
+
+  function setStage(idx){
+    for(let i=0;i<STAGES.length;i++){
+      const lbl = document.getElementById(`stage-${id}-${i}`)?.querySelector('.scan-stage-label');
+      const dot = document.getElementById(`stagedt-${id}-${i}`);
+      if(!lbl||!dot) continue;
+      if(i<idx){ lbl.className='scan-stage-label done'; dot.className='stage-dot done'; }
+      else if(i===idx){ lbl.className='scan-stage-label active'; dot.className='stage-dot active'; }
+      else { lbl.className='scan-stage-label'; dot.className='stage-dot'; }
+    }
+    const pct = STAGES[idx][0];
+    const bar = document.getElementById(`pbar-${id}`);
+    const pctEl= document.getElementById(`ppct-${id}`);
+    if(bar) bar.style.width = pct+'%';
+    if(pctEl) pctEl.textContent = pct+'%';
+  }
+
+  setStage(0);
+  let stageTimer = setInterval(()=>{
+    stageIdx++;
+    if(stageIdx < STAGES.length-1) setStage(stageIdx);
+  }, 700);
+
+  try{
+    const res  = await fetch(`${API}/scan/${id}`);
+    const data = await res.json();
+    clearInterval(stageTimer);
+    setStage(STAGES.length - 1);
+
+    // Cache result
+    scanResults[id] = data;
+    updateHighRisk();
+
+    // Short delay for UX
+    await sleep(400);
+    renderScanResult(id, data, panel);
+    renderTargets(); // update badge
+
+    addFeed(`Scan complete → <strong>${target?.domain||id}</strong> — Risk: ${data.risk_score||0}`, 'g');
+
+  } catch(e){
+    clearInterval(stageTimer);
+    panel.innerHTML = `
+      <div style="padding:8px 0;">
+        <span class="badge badge-high">⚠ Scan Failed</span>
+        <p class="muted" style="margin-top:8px;font-size:13px;">Could not reach the backend. Ensure it is running.</p>
+      </div>`;
+    toast('Scan failed. Check backend.','error');
+    addFeed(`Scan failed → <strong>${target?.domain||id}</strong>`, 'r');
+  }
+
+  btn.disabled = false;
+  btn.innerHTML = '▶ Scan';
+}
+
+/* ====================================================
+   RENDER SCAN RESULT
+==================================================== */
+function renderScanResult(id, data, panel){
+  const severity = (data.severity||'low').toLowerCase();
+  const score    = data.risk_score || 0;
+  const bdgCls   = severity==='high' ? 'badge-high' : severity==='medium' ? 'badge-med' : 'badge-ok';
+  const riskCls  = severity==='high' ? 'high' : severity==='medium' ? 'med' : 'low';
+  const ports    = data.open_ports || [];
+  const summary  = getSummary(data);
+  const recs     = getRecommendations(data);
+  const ts       = new Date().toLocaleString();
+
+  panel.innerHTML = `
+    <div class="result-section">
+
+      <div class="result-header">
+        <span class="result-title">Scan Results</span>
+        <span style="font-size:12px;color:var(--text3);font-family:var(--mono);">${ts}</span>
+      </div>
+
+      <div class="result-meta-grid">
+        <div class="rmeta">
+          <div class="rmeta-label">Risk Score</div>
+          <div class="rmeta-value">${score}<span style="font-size:13px;color:var(--text3)">/100</span></div>
+          <div class="risk-gauge"><div class="risk-fill ${riskCls}" style="width:${score}%"></div></div>
+        </div>
+        <div class="rmeta">
+          <div class="rmeta-label">Severity</div>
+          <div class="rmeta-value" style="display:flex;align-items:center;gap:8px;">
+            <span class="badge ${bdgCls}">${(data.severity||'low').toUpperCase()}</span>
+          </div>
+        </div>
+        <div class="rmeta">
+          <div class="rmeta-label">IP Address</div>
+          <div class="rmeta-value small">${escHtml(data.ip||'—')}</div>
+        </div>
+      </div>
+
+      ${ports.length ? `
+        <div class="result-title" style="margin-bottom:8px;">Open Ports</div>
+        <div class="ports-wrap">
+          ${ports.map(p=>`<div class="port-chip">${p}</div>`).join('')}
+        </div>
+      ` : ''}
+
+      <div class="ai-block">
+        <div class="ai-block-title">Executive Summary</div>
+        <p>${escHtml(summary)}</p>
+      </div>
+
+      ${recs.length ? `
+        <div class="ai-block">
+          <div class="ai-block-title">Recommendations</div>
+          <div class="ai-recs">
+            ${recs.map(r=>`<div class="ai-rec">${escHtml(r)}</div>`).join('')}
+          </div>
+        </div>
+      ` : ''}
+
+      <div class="result-actions">
+        <button class="btn btn-ghost" onclick="exportScanJSON(${id})">⬇ Export JSON</button>
+        <button class="btn btn-ghost" onclick="copyAIReport(${id})">📋 Copy Report</button>
+      </div>
+
+    </div>
+  `;
+}
+
+/* ====================================================
+   AI PARSING — ROBUST MULTI-FORMAT
+==================================================== */
+function getSummary(data){
+  const ai = data.ai_analysis;
+  if(!ai) return 'No AI analysis available.';
+
+  // Format 1: string
+  if(typeof ai === 'string') return ai;
+
+  // Format 2: { summary: "..." }
+  if(ai.summary) return ai.summary;
+
+  // Format 3: { analysis: { current_risk: "..." } }
+  if(ai.analysis?.current_risk) return ai.analysis.current_risk;
+
+  // Format 4: nested text scan
+  const flat = deepFindString(ai, ['summary','current_risk','description','text','overview','assessment','risk']);
+  if(flat) return flat;
+
+  return 'AI analysis completed. See recommendations below.';
+}
+
+function getRecommendations(data){
+  const ai = data.ai_analysis;
+  if(!ai) return [];
+
+  // Format 1: top-level array
+  if(Array.isArray(ai.recommendations)) return ai.recommendations;
+
+  // Format 2: recommendations.next_steps
+  if(Array.isArray(ai.recommendations?.next_steps)) return ai.recommendations.next_steps;
+
+  // Format 3: analysis.mitigation_steps
+  if(Array.isArray(ai.analysis?.mitigation_steps)) return ai.analysis.mitigation_steps;
+
+  // Deep search any array key ending in 'steps','recs','recommendations'
+  const found = deepFindArray(ai, ['next_steps','recommendations','steps','mitigation','actions','findings']);
+  if(found) return found;
+
+  return [];
+}
+
+function deepFindString(obj, keys){
+  if(!obj || typeof obj !== 'object') return null;
+  for(const k of keys){
+    if(typeof obj[k] === 'string' && obj[k].length > 5) return obj[k];
+  }
+  for(const v of Object.values(obj)){
+    if(typeof v === 'object'){
+      const r = deepFindString(v, keys);
+      if(r) return r;
+    }
+  }
+  return null;
+}
+
+function deepFindArray(obj, keys){
+  if(!obj || typeof obj !== 'object') return null;
+  for(const k of keys){
+    if(Array.isArray(obj[k]) && obj[k].length) return obj[k];
+  }
+  for(const v of Object.values(obj)){
+    if(typeof v === 'object' && !Array.isArray(v)){
+      const r = deepFindArray(v, keys);
+      if(r) return r;
+    }
+  }
+  return null;
+}
+
+/* ====================================================
+   LOAD ALERTS
+==================================================== */
+async function loadAlerts(){
+  const box = document.getElementById('alertsList');
+  box.innerHTML = `<div class="skeleton sk-row"></div>`;
+
+  try{
+    const res  = await fetch(API + "/alerts/");
+    const json = await res.json();
+    const data = json.data || json;
+    document.getElementById('kpiAlerts').textContent = data.length;
+
+    if(!data.length){
+      box.innerHTML = `
+        <div class="alert-item" style="border-color:rgba(0,255,170,.15)">
+          <div class="alert-icon" style="background:rgba(0,255,170,.06);border-color:rgba(0,255,170,.15);font-size:20px;">🛡️</div>
+          <div class="alert-content">
+            <div class="alert-msg">No Active Alerts</div>
+            <div class="alert-sub">System looks clean</div>
+          </div>
+        </div>`;
+      return;
+    }
+
+    box.innerHTML = data.map(a => {
+      const ts = a.created_at ? new Date(a.created_at).toLocaleString() : '';
+      const tid = (a.target_id === 0 || a.target_id) ? a.target_id : null;
+      const domain = a.domain ? escHtml(a.domain) : '—';
+      const targetTxt = tid ? `${domain} (#${tid})` : domain;
+      return `
+        <div class="alert-item">
+          <div class="alert-icon">⚠️</div>
+          <div class="alert-content">
+            <div class="alert-msg">${escHtml(a.message||'Security Alert')}</div>
+            <div class="alert-sub">Target: ${targetTxt}${ts ? ' · '+ts : ''}</div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+  } catch(e){
+    box.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon">⚠️</div>
+        <p>Failed to load alerts.</p>
+      </div>`;
+  }
+}
+
+/* ====================================================
+   EXPORT / COPY
+==================================================== */
+function exportScanJSON(id){
+  const data = scanResults[id];
+  if(!data){ toast('No scan data to export.','error'); return; }
+  const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = `raygaurd_scan_${id}_${Date.now()}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  toast('Scan data exported.','success');
+}
+
+function copyAIReport(id){
+  const data = scanResults[id];
+  if(!data){ toast('No scan data to copy.','error'); return; }
+  const target = allTargets.find(t=>t.id===id);
+  const summary = getSummary(data);
+  const recs    = getRecommendations(data);
+  const report  = [
+    `RAY-GUARD SECURITY REPORT`,
+    `Domain: ${target?.domain||id}`,
+    `Risk Score: ${data.risk_score||0}/100 (${data.severity||'—'})`,
+    `IP: ${data.ip||'—'}`,
+    `Open Ports: ${(data.open_ports||[]).join(', ')||'None detected'}`,
+    ``,
+    `EXECUTIVE SUMMARY`,
+    summary,
+    ``,
+    `RECOMMENDATIONS`,
+    ...recs.map((r,i)=>`${i+1}. ${r}`)
+  ].join('\n');
+  navigator.clipboard.writeText(report).then(
+    ()=>toast('Report copied to clipboard.','success'),
+    ()=>toast('Clipboard access denied.','error')
+  );
+}
+
+/* ====================================================
+   HELPERS
+==================================================== */
+function escHtml(str){
+  if(typeof str !== 'string') return String(str||'');
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
+
+/* ====================================================
+   INIT
+==================================================== */
+startClock();
+checkAPI();
+loadTargets();
+loadAlerts();
+
+// Auto-refresh every 60s (not 15s)
+setInterval(() => {
+  loadTargets();
+  loadAlerts();
+  checkAPI();
+}, 60000);
+</script>
+</body>
+</html>
